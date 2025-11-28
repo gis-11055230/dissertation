@@ -54,4 +54,20 @@ hospitals = osm.features_from_polygon(gm_buffer_geom, tags = {"amenity" : "hospi
 # extract doctor locations within the greater manchester buffer polygon
 doctors = osm.features_from_polygon(gm_buffer_geom, tags = {"amenity" : "doctors"})
 
-print(len(doctors))
+
+# SCHOOL LOCATION DATA (USING OSMNX)
+
+# extract school locations within the greater manchester buffer polygon (primary and secondary)
+schools = osm.features_from_polygon(gm_buffer_geom, tags = {"amenity" : "school"})
+
+print(len(schools))
+
+# extract primary schools from all schools (isced level = 1)
+primary_schools = schools[schools["isced:level"] == "1"]
+
+print(len(primary_schools))
+
+# extract secondary schools from all schools (isced level = 2 , 3)
+secondary_schools = schools[schools["isced:level"].isin(["2" , "3"])]
+
+print(len(secondary_schools))
