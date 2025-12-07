@@ -2,10 +2,8 @@
 
 import pandas as pd
 from geopandas import read_file
-from shapely.geometry import Point
-import geopandas as gpd
-from shapely import STRtree
 import osmnx as osm
+
 
 # FUNCTIONS
 
@@ -37,13 +35,13 @@ worst_pop_points = pop_points[pop_points["OA21CD"].isin(worst_10["name"])]
 combined_authority_boundaries = read_file("CAUTH_MAY_2025_EN_BSC_2688761639956883536/CAUTH_MAY_2025_EN_BSC.shp")
 
 # extract greater manchester's boundaries (in the national grid crs)
-gm_boundary = combined_authority_boundaries.to_crs(27700)[combined_authority_boundaries["CAUTH25NM"] == "Greater Manchester"]
+gm_boundary = combined_authority_boundaries[combined_authority_boundaries["CAUTH25NM"] == "Greater Manchester"].to_crs(27700)
 
 # create a 10 km buffer around the gm boundary to include neighbouring areas
-gm_buffer_geom = gm_boundary.buffer(10000)
+gm_buffer = gm_boundary.buffer(10000)
 
 # create a geometry object of the buffer to use for OSMnx (change to EPSG: 4326)
-gm_buffer_geom = gm_boundary.to_crs(4326).geometry.iloc[0]
+gm_buffer_geom = gm_buffer.to_crs(4326).geometry.iloc[0]
 
 
 # HEALTHCARE LOCATION DATA (USING OSMNX)
@@ -51,8 +49,12 @@ gm_buffer_geom = gm_boundary.to_crs(4326).geometry.iloc[0]
 # extract hospital locations within the greater manchester buffer polygon
 hospitals = osm.features_from_polygon(gm_buffer_geom, tags = {"amenity" : "hospital"})
 
+print(f"there are {len(hospitals)} hospitals in greater manchester (+buffer).")
+
 # extract doctor locations within the greater manchester buffer polygon
 doctors = osm.features_from_polygon(gm_buffer_geom, tags = {"amenity" : "doctors"})
+
+print(f"there are {len(doctors)} doctors in greater manchester (+buffer).")
 
 
 # SCHOOL LOCATION DATA (USING OSMNX)
@@ -60,13 +62,18 @@ doctors = osm.features_from_polygon(gm_buffer_geom, tags = {"amenity" : "doctors
 # extract school locations within the greater manchester buffer polygon (primary and secondary)
 schools = osm.features_from_polygon(gm_buffer_geom, tags = {"amenity" : "school"})
 
+print(f"there are {len(schools)} schools in greater manchester (+buffer).")
 
 # extract primary schools from all schools (isced level = 1)
 primary_schools = schools[schools["isced:level"] == "1"]
 
+print(f"there are {len(primary_schools)} primary schools in greater manchester (+buffer).")
 
 # extract secondary schools from all schools (isced level = 2 , 3)
 secondary_schools = schools[schools["isced:level"].isin(["2" , "3"])]
+
+
+print(f"there are {len(secondary_schools)} secondary schools in greater manchester (+buffer).")
 
 
 # JOB CENTRE LOCATION DATA (USING OSMNX)
@@ -74,4 +81,5 @@ secondary_schools = schools[schools["isced:level"].isin(["2" , "3"])]
 # extract employment agencies locations within the greater manchester buffer polygon
 job_centres = osm.features_from_polygon(gm_buffer_geom, tags = {"office" : "employment_agency"})
 
-print(len(job_centres))
+print(f"there are {len(job_centres)} job centres in greater manchester (+buffer).")
+
