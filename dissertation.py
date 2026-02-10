@@ -3,13 +3,12 @@
 import pandas as pd
 from geopandas import read_file
 import osmnx as osm
-
+from osmnx import graph
 
 # FUNCTIONS
 
 
 # LOAD DATA
-
 
 # TRSE DATA (EXTRACT TOP WORST OAS)
 
@@ -83,3 +82,8 @@ job_centres = osm.features_from_polygon(gm_buffer_geom, tags = {"office" : "empl
 
 print(f"there are {len(job_centres)} job centres in greater manchester (+buffer).")
 
+# create a graph for the walking network of GM and its buffer area using OSMNX
+walking_graph = graph.graph_from_polygon(gm_buffer_geom, network_type = "walk", simplify = True, retain_all = False, truncate_by_edge = True)
+
+# create a graph for the driving network of GM and its buffer area using OSMNX
+driving_graph = graph.graph_from_polygon(gm_buffer_geom, network_type = "drive", simplify = True, retain_all = False, truncate_by_edge = True)
