@@ -54,3 +54,9 @@ gm_buffer_geom = gm_buffer.to_crs(4326).geometry.iloc[0]
 hospitals = osm.features_from_polygon(gm_buffer_geom, tags = {"amenity" : "hospital"})
 
 print(f"there are {len(hospitals)} hospitals in greater manchester (+buffer).")
+
+
+# GRAPH (WALKING NETWORK)
+
+# create a graph for the walking network of GM and its buffer area using OSMNX
+walking_graph = graph.graph_from_polygon(gm_buffer_geom, network_type = "walk", simplify = True, retain_all = False, truncate_by_edge = True)
