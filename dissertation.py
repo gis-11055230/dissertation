@@ -84,6 +84,3 @@ print(f"there are {len(job_centres)} job centres in greater manchester (+buffer)
 
 # create a graph for the walking network of GM and its buffer area using OSMNX
 walking_graph = graph.graph_from_polygon(gm_buffer_geom, network_type = "walk", simplify = True, retain_all = False, truncate_by_edge = True)
-
-# create a graph for the driving network of GM and its buffer area using OSMNX
-driving_graph = graph.graph_from_polygon(gm_buffer_geom, network_type = "drive", simplify = True, retain_all = False, truncate_by_edge = True)
