@@ -1,5 +1,5 @@
 
-# HOSPITAL WALKING NETWORK ANALYSIS
+# HOSPITAL DRIVING NETWORK ANALYSIS
 
 
 # IMPORT DATA
@@ -28,8 +28,8 @@ def ellipsoidal_distance(node_a, node_b):
 	"""
     
 	# extract the data (the coordinates) from node_a and node_b
-	point_a = walking_graph.nodes(data=True)[node_a]
-	point_b = walking_graph.nodes(data=True)[node_b]
+	point_a = driving_graph.nodes(data=True)[node_a]
+	point_b = driving_graph.nodes(data=True)[node_b]
 
 	# compute the distance across the WGS84 ellipsoid (the one used by the dataset)
 	return Geod(ellps='WGS84').inv(point_a['x'], point_a['y'], point_b['x'], point_b['y'])[2]
@@ -73,7 +73,7 @@ def path_to_linestring(start_point, path_list, end_point):
 	for n in path_list:
 
 		# get the relevant node from the graph with lat lng data
-		node = walking_graph.nodes(data=True)[n]
+		node = driving_graph.nodes(data=True)[n]
 
 		# load the lat lng data into the lineString
 		line.append([node['x'], node['y']])
@@ -239,16 +239,16 @@ hospitals = osm.features_from_polygon(gm_buffer_geom, tags = {"amenity" : "hospi
 print(f"there are {len(hospitals)} hospitals in greater manchester (+buffer).")
 
 
-# GRAPH (WALKING NETWORK)
+# GRAPH (DRIVING NETWORK)
 
 # set start time
 start_time = perf_counter()	
 
-print(f"loading graph...")
+print("loading graph...")
 
-# open walking graph (use rb not wb as it wwill write over it!!!)
-with open('walking_graph.pkl', 'rb') as input:
-    walking_graph = load(input)
+# open driving graph (use rb not wb as it wwill write over it!!!)
+with open('driving_graph.pkl', 'rb') as input:
+    driving_graph = load(input)
 
 print(f"graph loaded in: {perf_counter() - start_time} seconds")
 
@@ -256,10 +256,10 @@ print(f"graph loaded in: {perf_counter() - start_time} seconds")
 # SPATIAL INDEX (GRAPH NODES)
 
 # create a list of the nodes
-node_list = list(walking_graph.nodes())
+node_list = list(driving_graph.nodes())
 
 # create a spatial index from graph nodes
-node_idx = STRtree([Point(n[1]['x'], n[1]['y']) for n in walking_graph.nodes(data=True)])
+node_idx = STRtree([Point(n[1]['x'], n[1]['y']) for n in driving_graph.nodes(data=True)])
 
 
 # SPATIAL INDEX (HOSPITALS)
@@ -276,7 +276,7 @@ hospital_idx = STRtree(hospital_points)
 # set start time
 start_time_astar = perf_counter()	
 
-print(f"starting astar..")
+print("starting astar..")
 
 # create an empty list
 distances = []
@@ -304,7 +304,7 @@ for id, pop in worst_pop_points.iterrows():
     # use try statement to catch exceptions
     try:
        	# calculate the shortest path across the network
-       	shortest_path = astar_path(walking_graph, from_node, to_node, ellipsoidal_distance)
+       	shortest_path = astar_path(driving_graph, from_node, to_node, ellipsoidal_distance)
         
         # create a variable to store the length of the network
         path_distance = 0
@@ -313,7 +313,7 @@ for id, pop in worst_pop_points.iterrows():
         for edge_start, edge_end in zip(shortest_path[:-1], shortest_path[1:]):
             
             # store edge data
-            edge_data = walking_graph.get_edge_data(edge_start, edge_end)
+            edge_data = driving_graph.get_edge_data(edge_start, edge_end)
             
             # choose the shortest parallel edge if multiple edges exist
             path_distance += min(attr["length"] for attr in edge_data.values())
@@ -332,9 +332,9 @@ for id, pop in worst_pop_points.iterrows():
         continue
     
 # add network to the original dataframe
-worst_pop_points["hospital_walking_astar"] = distances
+worst_pop_points["hospital_driving_astar"] = distances
 
-print(f"network calculated in: {perf_counter() - start_time_astar} seconds")
+print("network calculated in: {perf_counter() - start_time_astar} seconds")
 
 # calculate mean
 mean = (sum(distances)) / (len(distances))
@@ -374,7 +374,7 @@ gm_boundary_plot.plot(
 # plot the locations, coloured by distance to hospitals
 worst_pop_points_plot.plot(
     ax = my_ax,
-    column = 'hospital_walking_astar',
+    column = 'hospital_driving_astar',
     linewidth = 0,
 	markersize = 100,
     cmap = 'viridis',
