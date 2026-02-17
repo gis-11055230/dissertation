@@ -14,6 +14,8 @@ from shapely.geometry import LineString, Point
 from networkx import NodeNotFound, NetworkXNoPath
 from heapq import heappush, heappop
 from shapely import STRtree
+from matplotlib_scalebar.scalebar import ScaleBar
+from matplotlib.pyplot import subplots, savefig, title
 
 # FUNCTIONS
 
@@ -222,7 +224,7 @@ combined_authority_boundaries = read_file("CAUTH_MAY_2025_EN_BSC_268876163995688
 # extract greater manchester's boundaries (in the national grid crs)
 gm_boundary = combined_authority_boundaries[combined_authority_boundaries["CAUTH25NM"] == "Greater Manchester"].to_crs(27700)
 
-# create a 10 km buffer around the gm boundary to include neighbouring areas
+# create a 1 km buffer around the gm boundary to include neighbouring areas
 gm_buffer = gm_boundary.buffer(1000)
 
 # create a geometry object of the buffer to use for OSMnx (change to EPSG: 4326)
@@ -333,3 +335,63 @@ for id, pop in worst_pop_points.iterrows():
 worst_pop_points["hospital_walking_astar"] = distances
 
 print(f"network calculated in: {perf_counter() - start_time_astar} seconds")
+
+# calculate mean
+mean = (sum(distances)) / (len(distances))
+
+#report simple statistics
+print(f"Minimum distance to a hospital from TRSE vulnerable areas: {min(distances):,.0f}m.")
+print(f"Mean distance to a hospital from TRSE vulnerable areas: {mean:,.0f}m.")
+print(f"Maximum distance to a hospital from TRSE vulnerable areas: {max(distances):,.0f}m.")
+
+
+# PLOTTING MAP
+
+# change crs to be the same
+worst_pop_points_plot = worst_pop_points.to_crs(27700)
+gm_boundary_plot = gm_boundary.to_crs(27700)
+
+# create map axis object
+fig, my_ax = subplots(1, 1, figsize=(16, 10))
+
+# remove axes
+my_ax.axis('off')
+
+# add title
+title("Distance to Nearest Hospital in Greater Manchester for TRSE Vulnerable Individuals.")
+
+# add the district boundary
+gm_boundary_plot.plot(
+    ax = my_ax,
+    color = (0, 0, 0, 0),
+    linewidth = 1,
+	edgecolor = 'black',
+    )
+
+# plot the locations, coloured by distance to water
+worst_pop_points_plot.plot(
+    ax = my_ax,
+    column = 'hospital_walking_astar',
+    linewidth = 0,
+	markersize = 100,
+    cmap = 'RdYlBu_r',
+    scheme = 'quantiles',
+    legend = 'True',
+    legend_kwds = {
+        'loc': 'lower right',
+        'title': 'Distance to Nearest Hospital'
+        }
+    )
+
+# add north arrow
+x, y, arrow_length = 0.98, 0.99, 0.1
+my_ax.annotate('N', xy=(x, y), xytext=(x, y-arrow_length),
+	arrowprops=dict(facecolor='black', width=5, headwidth=15),
+	ha='center', va='center', fontsize=20, xycoords=my_ax.transAxes)
+
+# add scalebar
+my_ax.add_artist(ScaleBar(dx=1, units="m", location="lower left", length_fraction=0.25))
+
+# save the result
+savefig('out/3.png', bbox_inches='tight')
+print("done!")
