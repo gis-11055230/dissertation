@@ -1,14 +1,17 @@
 
 # HOSPITAL WALKING NETWORK ANALYSIS
 
+from time import perf_counter
+
+# set start time
+start_time = perf_counter()	
 
 # IMPORT DATA
 
 import pandas as pd
 from geopandas import read_file
 import osmnx as osm
-from osmnx import graph
-
+from pickle import load
 
 # FUNCTIONS
 
@@ -42,7 +45,7 @@ combined_authority_boundaries = read_file("CAUTH_MAY_2025_EN_BSC_268876163995688
 gm_boundary = combined_authority_boundaries[combined_authority_boundaries["CAUTH25NM"] == "Greater Manchester"].to_crs(27700)
 
 # create a 10 km buffer around the gm boundary to include neighbouring areas
-gm_buffer = gm_boundary.buffer(10000)
+gm_buffer = gm_boundary.buffer(1000)
 
 # create a geometry object of the buffer to use for OSMnx (change to EPSG: 4326)
 gm_buffer_geom = gm_buffer.to_crs(4326).geometry.iloc[0]
@@ -58,5 +61,10 @@ print(f"there are {len(hospitals)} hospitals in greater manchester (+buffer).")
 
 # GRAPH (WALKING NETWORK)
 
-# create a graph for the walking network of GM and its buffer area using OSMNX
-walking_graph = graph.graph_from_polygon(gm_buffer_geom, network_type = "walk", simplify = True, retain_all = False, truncate_by_edge = True)
+print(f"loading graph...")
+
+with open('driving_graph.pkl', 'rb') as input:
+    driving_graph = load(input)
+
+
+print(f"graph loaded in: {perf_counter() - start_time} seconds")
