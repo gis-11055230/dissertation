@@ -1,21 +1,19 @@
 
 # HOSPITAL WALKING NETWORK ANALYSIS
 
-from time import perf_counter
-
-# set start time
-start_time = perf_counter()	
 
 # IMPORT DATA
 
+from time import perf_counter
 import pandas as pd
-from geopandas import read_file
+from geopandas import read_file, GeoDataFrame, points_from_xy
 import osmnx as osm
 from pickle import load
 from pyproj import Geod
-from shapely.geometry import LineString
+from shapely.geometry import LineString, Point
 from networkx import NodeNotFound, NetworkXNoPath
 from heapq import heappush, heappop
+from shapely import STRtree
 
 # FUNCTIONS
 
@@ -210,6 +208,11 @@ pop_points = pd.read_csv("pop_points_centroids.csv")
 # extract the population points out of the 10% worst gm OA's
 worst_pop_points = pop_points[pop_points["OA21CD"].isin(worst_10["name"])]
 
+# turn the population points into a geodataframe according to the british national grid
+worst_pop_points = GeoDataFrame(worst_pop_points, geometry = points_from_xy(worst_pop_points["x"], worst_pop_points["y"]), crs = 27700)
+
+# convert worst pop points to WGS84
+worst_pop_points = (worst_pop_points).to_crs(4326)
 
 # GREATER MANCHESTER COMBINED AUTHORITY BOUNDARY
 
@@ -236,6 +239,9 @@ print(f"there are {len(hospitals)} hospitals in greater manchester (+buffer).")
 
 # GRAPH (WALKING NETWORK)
 
+# set start time
+start_time = perf_counter()	
+
 print(f"loading graph...")
 
 # open walking graph (use rb not wb as it wwill write over it!!!)
@@ -244,3 +250,86 @@ with open('walking_graph.pkl', 'rb') as input:
 
 print(f"graph loaded in: {perf_counter() - start_time} seconds")
 
+
+# SPATIAL INDEX (GRAPH NODES)
+
+# create a list of the nodes
+node_list = list(walking_graph.nodes())
+
+# create a spatial index from graph nodes
+node_idx = STRtree([Point(n[1]['x'], n[1]['y']) for n in walking_graph.nodes(data=True)])
+
+
+# SPATIAL INDEX (HOSPITALS)
+
+# create points/geom for hospitals (hospitals can be polygons and thus the centroid needs to be found to have a single point)
+hospital_points = [geom.centroid for geom in hospitals.geometry.to_list()]
+
+# create a spatial index for hospitals
+hospital_idx = STRtree(hospital_points)
+
+
+# A* SHORTEST PATH ANALYSIS FOR OA CENTROIDS
+
+# set start time
+start_time_astar = perf_counter()	
+
+print(f"starting astar..")
+
+# create an empty list
+distances = []
+
+# for each population point
+for id, pop in worst_pop_points.iterrows():
+    
+    # make a Point of the populations points coord data
+    pop_point = pop.geometry
+    
+    # for each population point, find the nearest node (so that we can do the network analysis)
+    from_node_id = node_idx.nearest([pop_point])[0]
+    from_node = node_list[from_node_id]
+    
+    # find the nearest hospital to each population point
+    nearest_hospital_id = hospital_idx.nearest([pop_point])[0]
+    nearest_hospital = hospital_points[nearest_hospital_id]
+    
+    # find the nearest node to the nearest hospital
+    to_node_id = node_idx.nearest([nearest_hospital])[0]
+    to_node = node_list[to_node_id]
+    
+    # A* algorithm
+    
+    # use try statement to catch exceptions
+    try:
+       	# calculate the shortest path across the network
+       	shortest_path = astar_path(walking_graph, from_node, to_node, ellipsoidal_distance)
+        
+        # create a variable to store the length of the network
+        path_distance = 0
+        
+        # loop through the edges in the shortest path
+        for edge_start, edge_end in zip(shortest_path[:-1], shortest_path[1:]):
+            
+            # store edge data
+            edge_data = walking_graph.get_edge_data(edge_start, edge_end)
+            
+            # choose the shortest parallel edge if multiple edges exist
+            path_distance += min(attr["length"] for attr in edge_data.values())
+            
+        # append the distances list with the length of the network
+        distances.append(path_distance)
+        
+    # catch exception for no path available
+    except NodeNotFound:
+        distances.append(None)
+        continue
+ 
+    # catch exception for no path available
+    except NetworkXNoPath:
+        distances.append(None)
+        continue
+    
+# add network to the original dataframe
+worst_pop_points["hospital_walking_astar"] = distances
+
+print(f"network calculated in: {perf_counter() - start_time_astar} seconds")
