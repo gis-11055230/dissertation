@@ -253,6 +253,18 @@ with open('walking_graph.pkl', 'rb') as input:
 print(f"graph loaded in: {perf_counter() - start_time} seconds")
 
 
+# CREATE AVERAGE WALKING SPEED
+
+# set variable for average walking speed
+walk_kph = 4.8
+
+# create an average walking speed
+metres_per_second = walk_kph * 1000 / 3600
+
+# add travel time (seconds) to each edge
+for x, y, z, data in walking_graph.edges(keys = True, data = True):
+    data["travel_time"] = data["length"] / metres_per_second
+
 # SPATIAL INDEX (GRAPH NODES)
 
 # create a list of the nodes
@@ -279,7 +291,7 @@ start_time_astar = perf_counter()
 print(f"starting astar..")
 
 # create an empty list
-distances = []
+travel_time_list = []
 
 # for each population point
 for id, pop in worst_pop_points.iterrows():
@@ -307,7 +319,7 @@ for id, pop in worst_pop_points.iterrows():
        	shortest_path = astar_path(walking_graph, from_node, to_node, ellipsoidal_distance)
         
         # create a variable to store the length of the network
-        path_distance = 0
+        path_time = 0
         
         # loop through the edges in the shortest path
         for edge_start, edge_end in zip(shortest_path[:-1], shortest_path[1:]):
@@ -316,33 +328,36 @@ for id, pop in worst_pop_points.iterrows():
             edge_data = walking_graph.get_edge_data(edge_start, edge_end)
             
             # choose the shortest parallel edge if multiple edges exist
-            path_distance += min(attr["length"] for attr in edge_data.values())
+            path_time += min(attr["travel_time"] for attr in edge_data.values())
             
-        # append the distances list with the length of the network
-        distances.append(path_distance)
+        # convert path_time to minutes
+        path_time_min = path_time / 60
+        
+        # append the travel_time_list list with the length of the network
+        travel_time_list.append(path_time_min)
         
     # catch exception for no path available
     except NodeNotFound:
-        distances.append(None)
+        travel_time_list.append(None)
         continue
  
     # catch exception for no path available
     except NetworkXNoPath:
-        distances.append(None)
+        travel_time_list.append(None)
         continue
     
 # add network to the original dataframe
-worst_pop_points["hospital_walking_astar"] = distances
+worst_pop_points["hospital_walking_astar"] = travel_time_list
 
 print(f"network calculated in: {perf_counter() - start_time_astar} seconds")
 
 # calculate mean
-mean = (sum(distances)) / (len(distances))
+mean = (sum(travel_time_list)) / (len(travel_time_list))
 
 #report simple statistics
-print(f"Minimum distance to a hospital from TRSE vulnerable areas: {min(distances):,.0f}m.")
-print(f"Mean distance to a hospital from TRSE vulnerable areas: {mean:,.0f}m.")
-print(f"Maximum distance to a hospital from TRSE vulnerable areas: {max(distances):,.0f}m.")
+print(f"Minimum travel time to a hospital from TRSE vulnerable areas: {min(travel_time_list):,.0f} mins.")
+print(f"Mean travel time to a hospital from TRSE vulnerable areas: {mean:,.0f} mins.")
+print(f"Maximum travel time to a hospital from TRSE vulnerable areas: {max(travel_time_list):,.0f} mins.")
 
 
 # PLOTTING MAP
@@ -361,7 +376,7 @@ fig, my_ax = subplots(1, 1, figsize=(16, 10))
 my_ax.axis('off')
 
 # add title
-title("Distance to Nearest Hospital in Greater Manchester for TRSE Vulnerable Individuals.")
+title("Shortest Travel Time to Nearest Hospital in Greater Manchester for TRSE Vulnerable Individuals.")
 
 # add the district boundary
 gm_boundary_plot.plot(
@@ -371,7 +386,7 @@ gm_boundary_plot.plot(
 	edgecolor = 'black',
     )
 
-# plot the locations, coloured by distance to hospitals
+# plot the locations, coloured by travel time to hospitals
 worst_pop_points_plot.plot(
     ax = my_ax,
     column = 'hospital_walking_astar',
@@ -382,11 +397,11 @@ worst_pop_points_plot.plot(
     legend = 'True',
     legend_kwds = {
         'loc': 'lower right',
-        'title': 'Distance to Nearest Hospital'
+        'title': 'Shortest Travel Time to Nearest Hospital'
         }
     )
 
-# plot the locations, coloured by distance to hospitals
+# plot the locations, coloured by travel time to hospitals
 hospital_points_plot.plot(
     ax = my_ax,
     linewidth = 0,
