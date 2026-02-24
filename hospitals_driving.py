@@ -6,7 +6,7 @@
 
 from time import perf_counter
 import pandas as pd
-from geopandas import read_file, GeoDataFrame, points_from_xy
+from geopandas import read_file, GeoDataFrame, points_from_xy, clip
 import osmnx as osm
 from pickle import load
 from pyproj import Geod
@@ -232,6 +232,14 @@ gm_buffer = gm_boundary.buffer(1000)
 # create a geometry object of the buffer to use for OSMnx (change to EPSG: 4326)
 gm_buffer_geom = gm_buffer.to_crs(4326).geometry.iloc[0]
 
+
+# OUTPUT AREA BOUNDARIES
+
+# read all OA boundaries
+oa_boundaries = read_file("Output_Areas_2021_EW_BGC_V2_-6371128854279904124/OA_2021_EW_BGC_V2.shp").to_crs(27700)
+
+# store the OA's that are in the GM boundary
+gm_oas = clip(oa_boundaries, gm_boundary)
 
 # HOSPITAL LOCATION DATA (USING OSMNX)
 
