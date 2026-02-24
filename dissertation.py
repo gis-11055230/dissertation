@@ -71,7 +71,6 @@ print(f"there are {len(primary_schools)} primary schools in greater manchester (
 # extract secondary schools from all schools (isced level = 2 , 3)
 secondary_schools = schools[schools["isced:level"].isin(["2" , "3"])]
 
-
 print(f"there are {len(secondary_schools)} secondary schools in greater manchester (+buffer).")
 
 
