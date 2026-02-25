@@ -6,7 +6,7 @@
 
 from time import perf_counter
 import pandas as pd
-from geopandas import read_file, GeoDataFrame, points_from_xy, clip
+from geopandas import read_file, GeoDataFrame, points_from_xy, clip, sjoin
 import osmnx as osm
 from pickle import load
 from pyproj import Geod
@@ -193,12 +193,13 @@ def astar_path(G, source, target, heuristic):
     # if the loop finishes, we didn't find a route - raise an exception
     raise NetworkXNoPath(f"Node {target} not reachable from {source}")
 
+
 # LOAD DATA
 
 # TRSE DATA (EXTRACT TOP WORST OAS)
 
 # read the greater manchester trse data from TftN (output areas (OA's))
-gm_trse = pd.read_csv("trse_data.csv")
+gm_trse = pd.read_csv("trse_data_new.csv")
 
 # extract the data of the 10% worst trse areas
 worst_10 = gm_trse[gm_trse["eng_trse_10pct"] == True]
@@ -236,10 +237,11 @@ gm_buffer_geom = gm_buffer.to_crs(4326).geometry.iloc[0]
 # OUTPUT AREA BOUNDARIES
 
 # read all OA boundaries
-oa_boundaries = read_file("Output_Areas_2021_EW_BGC_V2_-6371128854279904124/OA_2021_EW_BGC_V2.shp").to_crs(27700)
+oa_boundaries = read_file("Output_Areas_2021_EW_BGC_V2_-6371128854279904124/OA_2021_EW_BGC_V2.shp").to_crs(27700) 
 
-# store the OA's that are in the GM boundary
-gm_oas = clip(oa_boundaries, gm_boundary)
+# store the OA's that are in the GM boundary 
+gm_oas = oa_boundaries[oa_boundaries["OA21CD"].isin(gm_trse["name"])]
+
 
 # HOSPITAL LOCATION DATA (USING OSMNX)
 
@@ -369,10 +371,17 @@ print(f"Maximum travel time to a hospital from TRSE vulnerable areas: {max(trave
 
 # PLOTTING MAP
 
+# create copy of the results with the OA21CD (same in the OA's and worst_pop_points) and the results
+results = worst_pop_points[["OA21CD", "hospital_driving_astar"]]
+
+# merge the gm OAs and results so that the OA21CD are corresponding
+gm_oas = gm_oas.merge(results, on = "OA21CD", how = "left")
+
 # change crs to be the same
 worst_pop_points_plot = worst_pop_points.to_crs(27700)
 gm_boundary_plot = gm_boundary.to_crs(27700)
 hospital_points_plot = hospitals.to_crs(27700)
+gm_oas_plot = gm_oas.to_crs(27700)
 
 hospital_points_plot = hospital_points_plot.geometry.centroid
 
@@ -393,20 +402,19 @@ gm_boundary_plot.plot(
 	edgecolor = 'black',
     )
 
-# plot the locations, coloured by distance to hospitals
-worst_pop_points_plot.plot(
-    ax = my_ax,
+# plot the countries
+gm_oas_plot.plot(
+    ax = my_ax,						
     column = 'hospital_driving_astar',
-    linewidth = 0,
-	markersize = 100,
-    cmap = 'viridis',
-    scheme = 'quantiles',
+    cmap = 'viridis',          
+    scheme = 'quantiles',  
+    linewidth = 0.5,			
+    edgecolor = 'gray',     
     legend = 'True',
     legend_kwds = {
-        'loc': 'lower right',
-        'title': 'Shortest Travel Time to Nearest Hospital'
-        }
-    )
+    'loc': 'lower right',
+    'title': 'Shortest Travel Time to Nearest Hospital'
+    })
 
 # plot the locations, coloured by distance to hospitals
 hospital_points_plot.plot(
