@@ -160,7 +160,8 @@ def astar_path(G, source, target, heuristic):
 			# 	is simply the distance to the current node (which we already know), plus the
 			# 	distance from that node to this neighbour (which is stored in the edge data)
             
-            dist_from_start = cur_net_dist + edge_data[0]['length']
+            edge_len = min(attr["length"] for attr in edge_data.values())
+            dist_from_start = cur_net_dist + edge_len
       
             # have we already seen this neighbour?
             if neighbour in distances:
@@ -196,6 +197,7 @@ def astar_path(G, source, target, heuristic):
 
 # LOAD DATA
 
+
 # TRSE DATA (EXTRACT TOP WORST OAS)
 
 # read the greater manchester trse data from TftN (output areas (OA's))
@@ -219,6 +221,7 @@ worst_pop_points = GeoDataFrame(worst_pop_points, geometry = points_from_xy(wors
 # convert worst pop points to WGS84
 worst_pop_points = (worst_pop_points).to_crs(4326)
 
+
 # GREATER MANCHESTER COMBINED AUTHORITY BOUNDARY
 
 # read all boundaries
@@ -230,8 +233,11 @@ gm_boundary = combined_authority_boundaries[combined_authority_boundaries["CAUTH
 # create a 1 km buffer around the gm boundary to include neighbouring areas
 gm_buffer = gm_boundary.buffer(1000)
 
-# create a geometry object of the buffer to use for OSMnx (change to EPSG: 4326)
-gm_buffer_geom = gm_buffer.to_crs(4326).geometry.iloc[0]
+# create a single polygon with the buffer included (so it can be used for OSMnx)
+gm_buffer = gm_buffer.unary_union
+
+# create a geometry object of the buffer to use for OSMnx (change to EPSG : 4326)
+gm_buffer_geom = GeoDataFrame(geometry = [gm_buffer], crs = 27700).to_crs(4326).geometry.iloc[0]
 
 
 # OUTPUT AREA BOUNDARIES
@@ -250,6 +256,9 @@ hospitals = osm.features_from_polygon(gm_buffer_geom, tags = {"amenity" : "hospi
 
 print(f"there are {len(hospitals)} hospitals in greater manchester (+buffer).")
 
+# create hospital points (sometimes can be polygons points so convesrt it to their centroid if a polygon)
+hospital_points = hospitals.geometry.apply(lambda g: g.centroid).to_list()
+
 
 # GRAPH (DRIVING NETWORK)
 
@@ -258,20 +267,43 @@ start_time = perf_counter()
 
 print("loading graph...")
 
-# open driving graph (use rb not wb as it wwill write over it!!!)
+# open driving graph (use rb not wb as it will write over it!!!)
 with open('driving_graph.pkl', 'rb') as input:
     driving_graph = load(input)
 
 print(f"graph loaded in: {perf_counter() - start_time} seconds")
 
 
+
+
 # GRAPH SPEEDS
 
 # calculate edge speeds to each edge to work out the shortest time
-driving_graph = osm.routing.add_edge_speeds(driving_graph, hwy_speeds = None, fallback = None, agg= mean)
+driving_graph = osm.routing.add_edge_speeds(driving_graph, hwy_speeds = None, fallback = 30, agg = mean)
 
 # create a graph with the travel times on each edge to work out the shortest time
 driving_graph = osm.routing.add_edge_travel_times(driving_graph)
+
+# NEAREST GRAPH NODES
+
+# create a list of the nodes
+from_node = osm.distance.nearest_nodes(driving_graph, worst_pop_points.x, worst_pop_points.y)
+
+# create a spatial index from graph nodes
+to_node = osm.distance.nearest_nodes(driving_graph, nearest_)
+
+
+# SPATIAL INDEX (HOSPITALS)
+
+# create points/geom for hospitals (hospitals can be polygons and thus the centroid needs to be found to have a single point)
+hospital_points = [geom.centroid for geom in hospitals.geometry.to_list()]
+
+# create a spatial index for hospitals
+hospital_idx = STRtree(hospital_points)
+
+
+
+
 
 
 # SPATIAL INDEX (GRAPH NODES)
