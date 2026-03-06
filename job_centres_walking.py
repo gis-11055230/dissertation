@@ -9,12 +9,14 @@ from geopandas import read_file, GeoDataFrame, points_from_xy
 import osmnx as osm
 from pickle import load
 from pyproj import Geod
-from shapely.geometry import LineString, Point
+from shapely.geometry import LineString
 from networkx import NodeNotFound, NetworkXNoPath
 from heapq import heappush, heappop
 from shapely import STRtree
 from matplotlib_scalebar.scalebar import ScaleBar
-from matplotlib.pyplot import subplots, savefig, title
+from matplotlib.pyplot import subplots, savefig
+from numpy import mean
+
 
 # FUNCTIONS
 
@@ -32,6 +34,25 @@ def ellipsoidal_distance(node_a, node_b):
 
 	# compute the distance across the WGS84 ellipsoid (the one used by the dataset)
 	return Geod(ellps='WGS84').inv(point_a['x'], point_a['y'], point_b['x'], point_b['y'])[2]
+
+# time_heuristic function (to find the fastest route, not just the shortest distance)
+def time_heuristic(node_a, node_b, walk_kph = 4.8):
+    
+    """
+    Estimate the time (in seconds) between two nodes using straight line
+    distance divided by a conservative maximum speed.
+    
+    Helps the A* algorithm be more efficient in finding the fastest route
+    """
+    
+    # convert speed from kph (kilometres per hour) to m/s (metres per second)
+    walk_mps =(walk_kph * 1000) / 3600
+    
+    # calculate the distance in metres between node_a and node_b using ellipsoidal_distance function above
+    distance_in_metres = ellipsoidal_distance(node_a, node_b)
+    
+    # return the estimated time (in seconds) between node a and b
+    return distance_in_metres / walk_mps
 
 # reconstuct_path function
 def reconstruct_path(end_node, parent_node, parents):
@@ -62,29 +83,31 @@ def reconstruct_path(end_node, parent_node, parents):
 
 # path_to_linesting function
 def path_to_linestring(start_point, path_list, end_point):
-	"""
+	
+    """
 	Convert a shortest path to a LineString object
 	"""
-	# initialise the list with the start point
-	line = [start_point]
-
-	# loop through each node in the shortest path and load into list
-	for n in path_list:
-
-		# get the relevant node from the graph with lat lng data
-		node = walking_graph.nodes(data=True)[n]
-
-		# load the lat lng data into the lineString
-		line.append([node['x'], node['y']])
+	
+    # initialise the list with the start point
+    line = [start_point]
+    
+    # loop through each node in the shortest path and load into list
+    for n in path_list:
+        
+        # get the relevant node from the graph with lat lng data
+        node = walking_graph.nodes(data=True)[n]
+        
+        # load the lat lng data into the lineString
+        line.append([node['x'], node['y']])
 
 	# append end point to list
-	line.append(end_point)
+    line.append(end_point)
 
 	# store as a LineString
-	return LineString(line)
+    return LineString(line)
 
 # astar_path function
-def astar_path(G, source, target, heuristic):
+def astar_path(G, source, target, heuristic, weight = "travel_time"):
     
     # first, make sure that both the `source` and `target` nodes actually exist...
     if source not in G or target not in G:
@@ -95,26 +118,26 @@ def astar_path(G, source, target, heuristic):
 
 	# initialise a list for the heap queue. This will be a list of tuples, each containing 4 values:
 	# `priority`: this is the value on which the list will be sorted by the heap queue algorithm. In 
-	# 	 our case, this will be the estimated distance for this node (the network distance from the
-	# 	 start to this node + the straight line distance from this node to the end) 
+	# our case, this will be the estimated distance for this node (the network distance from the
+	# start to this node + the straight line distance from this node to the end) 
 	# `counter`: this is simply a unique number to make sure that the algorithm can sort nodes with 
-	# 	 equal `priority` values
+	# equal `priority` values
 	# `node`: the ID of the node to which this entry refers 
 	# `cost`: this is the network distance between the start point and the node, used as part of our
-	# 	 routing algorithm (storing it prevents us from needing to calculate the same distance multiple 
-	# 	 times)
+	# routing algorithm (storing it prevents us from needing to calculate the same distance multiple 
+	# times)
     # `parent`: the ID of the node immediately before this one in the path
     
     queue = [(0, counter, source, 0, None)]
 
 	# dictionary to keep track of the network distance from the start to this node, and the straight
-	# 	line distance from this node to the end point. This is used to decide which is the best parent 
-	# 	for each node that we record in the `parents`` dictionary
+	# line distance from this node to the end point. This is used to decide which is the best parent 
+	# for each node that we record in the `parents`` dictionary
     
     distances = {}
 
 	# dictionary to keep track of the parent of each node that we have explored. This is used when we 
-	# 	come to reconstruct the route once we reach the end point
+	# come to reconstruct the route once we reach the end point
     
     parents = {}
     
@@ -122,7 +145,7 @@ def astar_path(G, source, target, heuristic):
     while queue:
 
 		# pop the next node, its network distance from the start, and its parent from the queue
-        cur_node, cur_net_dist, cur_parent = heappop(queue)[2:]	# use list slicing to ignore the first two items
+        cur_node, cur_cost, cur_parent = heappop(queue)[2:]	# use list slicing to ignore the first two items
 
         ''' Section 1: a series of checks for whether we should reject the node ''' 
     
@@ -142,7 +165,7 @@ def astar_path(G, source, target, heuristic):
                 continue
     
             # if we already have a shorter path to this node, abandon this new path and try the next one
-            if distances[cur_node][0] < cur_net_dist:
+            if distances[cur_node][0] < cur_cost:
                 continue
          
         ''' Section 3: assessing the node and seeing if it is in the shortest path '''
@@ -153,49 +176,56 @@ def astar_path(G, source, target, heuristic):
 		# get the neighbours for the current node (under assessment)
         for neighbour, edge_data in G[cur_node].items():
             
-            # work out the network distance to this neighbour from the start of the path - this
-			# 	is simply the distance to the current node (which we already know), plus the
-			# 	distance from that node to this neighbour (which is stored in the edge data)
+            # choose the best parallel edge in the Multigraph based on the weight we care about
+            try:
+                edge_weight = min(attr[weight] for attr in edge_data.values() if attr.get(weight) is not None)
             
-            dist_from_start = cur_net_dist + edge_data[0]['length']
-      
+            # if there is no valid weight on any of the parallel edges, then continue
+            except ValueError:
+                continue
+            
+            # create a new cost from the start of the network
+            new_cost = cur_cost + edge_weight
+            
             # have we already seen this neighbour?
             if neighbour in distances:
     
                 # as we have been get the network distance from the start via the previous and straight 
-    			#  line distance to the end
-                previous_dist_from_start, dist_to_end = distances[neighbour]
+    			# line distance to the end
+                previous_cost_from_start, cost_to_end = distances[neighbour]
     
                 # if the previous path we found to this node is shorter, abandon this new path
-                if previous_dist_from_start <= dist_from_start:
+                if previous_cost_from_start <= new_cost:
                     continue
     			
             # if we haven't seen this neighbour before, calculate the straight line distance to the end
             else:
-                dist_to_end = heuristic(neighbour, target)
+                cost_to_end = heuristic(neighbour, target)
     
             # add the two distances to the distances dictionary
-            distances[neighbour] = (dist_from_start, dist_to_end)
+            distances[neighbour] = (new_cost, cost_to_end)
     
             # work out the estimated distance for this path (the network distance from the start to 
-            #  this node + the straight line distance from this node to the end). This will act as the 
-            #  priority value for our heap queue - the route with the shortest estimated didstance will 
-            #  be assessed first.
-            estimated_dist = dist_from_start + dist_to_end
+            # this node + the straight line distance from this node to the end). This will act as the 
+            # priority value for our heap queue - the route with the shortest estimated didstance will 
+            # be assessed first.
+            estimated_cost = new_cost + cost_to_end
             
             # increment counter and push to heap
             counter += 1
-            heappush(queue, (estimated_dist, counter, neighbour, dist_from_start, cur_node))
+            heappush(queue, (estimated_cost, counter, neighbour, new_cost, cur_node))
 
     # if the loop finishes, we didn't find a route - raise an exception
     raise NetworkXNoPath(f"Node {target} not reachable from {source}")
 
+
 # LOAD DATA
+
 
 # TRSE DATA (EXTRACT TOP WORST OAS)
 
 # read the greater manchester trse data from TftN (output areas (OA's))
-gm_trse = pd.read_csv("trse_data.csv")
+gm_trse = pd.read_csv("trse_data_new.csv")
 
 # extract the data of the 10% worst trse areas
 worst_10 = gm_trse[gm_trse["eng_trse_10pct"] == True]
@@ -215,6 +245,7 @@ worst_pop_points = GeoDataFrame(worst_pop_points, geometry = points_from_xy(wors
 # convert worst pop points to WGS84
 worst_pop_points = (worst_pop_points).to_crs(4326)
 
+
 # GREATER MANCHESTER COMBINED AUTHORITY BOUNDARY
 
 # read all boundaries
@@ -226,8 +257,32 @@ gm_boundary = combined_authority_boundaries[combined_authority_boundaries["CAUTH
 # create a 1 km buffer around the gm boundary to include neighbouring areas
 gm_buffer = gm_boundary.buffer(1000)
 
-# create a geometry object of the buffer to use for OSMnx (change to EPSG: 4326)
-gm_buffer_geom = gm_buffer.to_crs(4326).geometry.iloc[0]
+# create a single polygon with the buffer included (so it can be used for OSMnx)
+gm_buffer = gm_buffer.union_all()
+
+# create a geometry object of the buffer to use for OSMnx (change to EPSG : 4326)
+gm_buffer_geom = GeoDataFrame(geometry = [gm_buffer], crs = 27700).to_crs(4326).geometry.iloc[0]
+
+
+# DISTRICT BOUNDARIES
+
+# read all the boundaries
+districts = read_file("Local_Authority_Districts_December_2023_Boundaries_UK_BGC_-1243688636813977100/LAD_DEC_2023_UK_BGC.shp")
+
+# create a list which contains gm's boroughs
+gm_boroughs = ["Bolton","Bury","Manchester","Oldham","Rochdale","Salford","Stockport","Tameside","Trafford","Wigan"]
+
+# extract the gm boroughs from the districts
+gm_districts = districts[districts["LAD23NM"].isin(gm_boroughs)]
+
+
+# OUTPUT AREA BOUNDARIES
+
+# read all OA boundaries
+oa_boundaries = read_file("Output_Areas_2021_EW_BGC_V2_-6371128854279904124/OA_2021_EW_BGC_V2.shp").to_crs(27700) 
+
+# store the OA's that are in the GM boundary 
+gm_oas = oa_boundaries[oa_boundaries["OA21CD"].isin(gm_trse["name"])]
 
 
 # JOB CENTRE LOCATION DATA (USING OSMNX)
@@ -237,6 +292,9 @@ job_centres = osm.features_from_polygon(gm_buffer_geom, tags = {"office" : "empl
 
 print(f"there are {len(job_centres)} job centres in greater manchester (+buffer).")
 
+# create job centres points (sometimes can be polygons points so convesrt it to their centroid if a polygon)
+job_centres_points = job_centres.geometry.apply(lambda g: g.centroid).to_list()
+
 
 # GRAPH (WALKING NETWORK)
 
@@ -245,26 +303,26 @@ start_time = perf_counter()
 
 print(f"loading graph...")
 
-# open walking graph (use rb not wb as it wwill write over it!!!)
+# open walking graph (use rb not wb as it will write over it!!!)
 with open('walking_graph.pkl', 'rb') as input:
     walking_graph = load(input)
 
 print(f"graph loaded in: {perf_counter() - start_time} seconds")
 
+# CREATE AVERAGE WALKING SPEED
 
-# SPATIAL INDEX (GRAPH NODES)
+# set variable for average walking speed
+walk_kph = 4.8
 
-# create a list of the nodes
-node_list = list(walking_graph.nodes())
+# create an average walking speed
+metres_per_second = walk_kph * 1000 / 3600
 
-# create a spatial index from graph nodes
-node_idx = STRtree([Point(n[1]['x'], n[1]['y']) for n in walking_graph.nodes(data=True)])
-
+# add travel time (seconds) to each edge
+for x, y, z, data in walking_graph.edges(keys = True, data = True):
+    data["travel_time"] = data["length"] / metres_per_second
+    
 
 # SPATIAL INDEX (JOB CENTRES)
-
-# create points/geom for job centres (job centres can be polygons and thus the centroid needs to be found to have a single point)
-job_centres_points = [geom.centroid for geom in job_centres.geometry.to_list()]
 
 # create a spatial index for job centres
 job_centres_idx = STRtree(job_centres_points)
@@ -275,10 +333,10 @@ job_centres_idx = STRtree(job_centres_points)
 # set start time
 start_time_astar = perf_counter()	
 
-print(f"starting astar..")
+print(f"starting astar...")
 
 # create an empty list
-distances = []
+travel_time_list = []
 
 # for each population point
 for id, pop in worst_pop_points.iterrows():
@@ -287,26 +345,28 @@ for id, pop in worst_pop_points.iterrows():
     pop_point = pop.geometry
     
     # for each population point, find the nearest node (so that we can do the network analysis)
-    from_node_id = node_idx.nearest([pop_point])[0]
-    from_node = node_list[from_node_id]
+    from_node = osm.distance.nearest_nodes(walking_graph, pop_point.x, pop_point.y)
     
-    # find the nearest job centres to each population point
-    nearest_job_centres_id = job_centres_idx.nearest([pop_point])[0]
+    # find the nearest job centre to each population point
+    try:
+        nearest_job_centres_id = job_centres_idx.nearest([pop_point])[0]
+    except TypeError:
+        nearest_job_centres_id = job_centres_idx.nearest(pop_point)
+        
     nearest_job_centres = job_centres_points[nearest_job_centres_id]
     
-    # find the nearest node to the nearest job_centres
-    to_node_id = node_idx.nearest([nearest_job_centres])[0]
-    to_node = node_list[to_node_id]
+    # find the nearest node to the nearest job centres
+    to_node = osm.distance.nearest_nodes(walking_graph, nearest_job_centres.x, nearest_job_centres.y)
     
     # A* algorithm
     
     # use try statement to catch exceptions
     try:
        	# calculate the shortest path across the network
-       	shortest_path = astar_path(walking_graph, from_node, to_node, ellipsoidal_distance)
+       	shortest_path = astar_path(walking_graph, from_node, to_node, time_heuristic, weight = "travel_time")
         
-        # create a variable to store the length of the network
-        path_distance = 0
+        # create a variable to store the total time of the network (in seconds)
+        path_time = 0
         
         # loop through the edges in the shortest path
         for edge_start, edge_end in zip(shortest_path[:-1], shortest_path[1:]):
@@ -314,44 +374,60 @@ for id, pop in worst_pop_points.iterrows():
             # store edge data
             edge_data = walking_graph.get_edge_data(edge_start, edge_end)
             
-            # choose the shortest parallel edge if multiple edges exist
-            path_distance += min(attr["length"] for attr in edge_data.values())
-            
+            # choose the fastest travel_time parallel edge if multiple edges exist
+            path_time += min(attr["travel_time"] for attr in edge_data.values() if attr.get("travel_time") is not None)
+    
+        # convert seconds to minutes
+        path_time_min = path_time / 60
+        
         # append the distances list with the length of the network
-        distances.append(path_distance)
+        travel_time_list.append(path_time_min)
         
     # catch exception for no path available
     except NodeNotFound:
-        distances.append(None)
+        travel_time_list.append(None)
         continue
  
     # catch exception for no path available
     except NetworkXNoPath:
-        distances.append(None)
+        travel_time_list.append(None)
         continue
     
 # add network to the original dataframe
-worst_pop_points["job_centres_walking_astar"] = distances
+worst_pop_points["job_centres_walking_astar"] = travel_time_list
 
 print(f"network calculated in: {perf_counter() - start_time_astar} seconds")
 
-# calculate mean
-mean = (sum(distances)) / (len(distances))
+# check how many routes were successful
+valid_times = [t for t in travel_time_list if t is not None]
+print(f"Valid routes: {len(valid_times)} / {len(travel_time_list)}")
 
-#report simple statistics
-print(f"Minimum distance to a job centre from TRSE vulnerable areas: {min(distances):,.0f}m.")
-print(f"Mean distance to a job centre from TRSE vulnerable areas: {mean:,.0f}m.")
-print(f"Maximum distance to a job centre from TRSE vulnerable areas: {max(distances):,.0f}m.")
+if len(valid_times) > 0:
+    
+    # calculate mean
+    mean_time = (sum(travel_time_list)) / (len(travel_time_list))
 
+    #report simple statistics
+    print(f"Minimum travel time to a job centre from TRSE vulnerable areas: {min(travel_time_list):,.0f} mins.")
+    print(f"Mean travel time to a job centre from TRSE vulnerable areas: {mean_time:,.0f} mins.")
+    print(f"Maximum travel time to a job centre from TRSE vulnerable areas: {max(travel_time_list):,.0f} mins.")
+
+else:
+    print("No valid travel times to summarise.")
 
 # PLOTTING MAP
 
-# change crs to be the same
-worst_pop_points_plot = worst_pop_points.to_crs(27700)
-gm_boundary_plot = gm_boundary.to_crs(27700)
-job_centres_points_plot = job_centres.to_crs(27700)
+# create copy of the results with the OA21CD (same in the OA's and worst_pop_points) and the results
+results = worst_pop_points[["OA21CD", "job_centres_walking_astar"]]
 
-job_centres_points_plot = job_centres_points_plot.geometry.centroid
+# merge the gm OAs and results so that the OA21CD are corresponding
+gm_oas = gm_oas.merge(results, on = "OA21CD", how = "left")
+
+# change crs to be the same
+gm_boundary_plot = gm_boundary.to_crs(27700)
+gm_oas_plot = gm_oas.to_crs(27700)
+job_centres_points_plot = GeoDataFrame(geometry = job_centres_points, crs = 4326).to_crs(27700)
+gm_districts_plot = gm_districts.to_crs(27700)
 
 # create map axis object
 fig, my_ax = subplots(1, 1, figsize=(16, 10))
@@ -359,41 +435,71 @@ fig, my_ax = subplots(1, 1, figsize=(16, 10))
 # remove axes
 my_ax.axis('off')
 
-# add title
-title("Distance to Nearest Job Centre in Greater Manchester for TRSE Vulnerable Individuals.")
+# plot the OA's
+gm_oas_plot.plot(
+    ax = my_ax,						
+    column = 'job_centres_walking_astar',
+    cmap = 'YlOrRd',          
+    scheme = 'user_defined',
+    classification_kwds = {'bins' :[ 15, 30, 45 ]},
+    linewidth = 0.15,			
+    edgecolor = 'gray',     
+    legend = True,
+    missing_kwds = {"color": "#f2f2f2",
+                     "label": "Non-TRSE OA"},
+    legend_kwds = {
+    'loc': 'lower right',
+    'title': 'Shortest Walking Time to Nearest Job Centre (mins)',
+    'frameon': True,
+    'borderpad': 0.6,
+    'labelspacing': 0.5
+    })
 
-# add the district boundary
-gm_boundary_plot.plot(
-    ax = my_ax,
-    color = (0, 0, 0, 0),
-    linewidth = 1,
-	edgecolor = 'black',
+# create an outline that exactly matches the OA geometry
+gm_outline = gm_oas_plot.geometry.union_all().boundary
+
+# plot the outline
+GeoDataFrame(geometry=[gm_outline], crs=gm_oas_plot.crs).plot(
+    ax=my_ax,
+    color="none",
+    edgecolor="black",
+    linewidth= 1
     )
+
+# plot the boruoughs boundaries
+gm_districts.boundary.plot(
+    ax=my_ax,
+    color="black",
+    linewidth=0.8,
+    zorder=5
+    )
+
+# modify legend labels manually
+legend = my_ax.get_legend()
+labels = [text.get_text() for text in legend.get_texts()]
+
+#  replace last label with 10+
+labels[-2] = "45+ mins (Very High Spatial Barrier)"
+labels[-3] = "30-45 mins (High Spatial Barrier)"
+labels[-4] = "15-30 mins (Moderate Spatial Barrier)"
+labels[-5] = "0-15 mins (Low Spatial Barrier)"
+
+for text, new_label in zip(legend.get_texts(), labels):
+    text.set_text(new_label)
+ 
+legend.set_title("Walking Travel Time to Nearest Job Centre (minutes)", prop={'size':10})
+for text in legend.get_texts():
+    text.set_fontsize(9)
 
 # plot the locations, coloured by distance to job centres
-worst_pop_points_plot.plot(
-    ax = my_ax,
-    column = 'job_centres_walking_astar',
-    linewidth = 0,
-	markersize = 100,
-    cmap = 'viridis',
-    scheme = 'quantiles',
-    legend = 'True',
-    legend_kwds = {
-        'loc': 'lower right',
-        'title': 'Distance to Nearest Job Centre'
-        }
-    )
-
-# plot the locations, coloured by distance to job centre
-job_centres_points_plot.plot(
-    ax = my_ax,
-    linewidth = 0,
-    marker = 'x',
-	markersize = 50,
-    color = 'black',
-    zorder = 4
-    )
+#job_centres_points_plot.plot(
+    #ax = my_ax,
+    #linewidth = 0,
+    #marker = 'x',
+	#markersize = 100,
+    #color = 'black',
+    #zorder = 4
+    #)
 
 # add north arrow
 x, y, arrow_length = 0.98, 0.99, 0.1

@@ -440,7 +440,7 @@ gm_oas_plot.plot(
     cmap = 'YlOrRd',          
     scheme = 'user_defined',
     classification_kwds = {'bins' :[ 5, 10 ]},
-    linewidth = 0.3,			
+    linewidth = 0.15,			
     edgecolor = 'gray',     
     legend = True,
     missing_kwds = {"color": "#f2f2f2",
@@ -484,7 +484,7 @@ labels[-4] = "0-5 mins (Low Spatial Barrier)"
 for text, new_label in zip(legend.get_texts(), labels):
     text.set_text(new_label)
  
-legend.set_title("Driving Time to Nearest Hospital (mins)", prop={'size':10})
+legend.set_title("Driving Travel Time to Nearest Hospital (minutes)", prop={'size':10})
 for text in legend.get_texts():
     text.set_fontsize(9)
 

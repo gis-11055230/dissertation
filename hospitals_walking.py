@@ -441,8 +441,8 @@ gm_oas_plot.plot(
     column = 'hospital_walking_astar',
     cmap = 'YlOrRd',          
     scheme = 'user_defined',
-    classification_kwds = {'bins' :[ 15, 30 ]},
-    linewidth = 0.3,			
+    classification_kwds = {'bins' :[ 15, 30, 45 ]},
+    linewidth = 0.15,			
     edgecolor = 'gray',     
     legend = True,
     missing_kwds = {"color": "#f2f2f2",
@@ -479,14 +479,15 @@ legend = my_ax.get_legend()
 labels = [text.get_text() for text in legend.get_texts()]
 
 #  replace last label with 10+
-labels[-2] = "30+ mins (High Spatial Barrier)"
-labels[-3] = "15-30 mins (Moderate Spatial Barrier)"
-labels[-4] = "0-15 mins (Low Spatial Barrier)"
+labels[-2] = "45+ mins (Very High Spatial Barrier)"
+labels[-3] = "30-45 mins (High Spatial Barrier)"
+labels[-4] = "15-30 mins (Moderate Spatial Barrier)"
+labels[-5] = "0-15 mins (Low Spatial Barrier)"
 
 for text, new_label in zip(legend.get_texts(), labels):
     text.set_text(new_label)
  
-legend.set_title("Walking Time to Nearest Hospital (mins)", prop={'size':10})
+legend.set_title("Walking Travel Time to Nearest Hospital (minutes)", prop={'size':10})
 for text in legend.get_texts():
     text.set_fontsize(9)
 

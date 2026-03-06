@@ -1,4 +1,4 @@
-# HOSPITAL PT NETWORK ANALYSIS
+# PRIMARY SCHOOLS PT NETWORK ANALYSIS
 
 
 # IMPORT DATA
@@ -80,15 +80,20 @@ oa_boundaries = read_file("Output_Areas_2021_EW_BGC_V2_-6371128854279904124/OA_2
 gm_oas = oa_boundaries[oa_boundaries["OA21CD"].isin(gm_trse["name"])]
 
 
-# HOSPITAL LOCATION DATA (USING OSMNX)
+# SCHOOL LOCATION DATA (USING OSMNX)
 
-# extract hospital locations within the greater manchester buffer polygon
-hospitals = osm.features_from_polygon(gm_buffer_geom, tags = {"amenity" : "hospital"})
+# extract school locations within the greater manchester buffer polygon (primary and secondary)
+schools = osm.features_from_polygon(gm_buffer_geom, tags = {"amenity" : "school"})
 
-print(f"there are {len(hospitals)} hospitals in greater manchester (+buffer).")
+print(f"there are {len(schools)} schools in greater manchester (+buffer).")
 
-# create hospital points (sometimes can be polygons points so convesrt it to their centroid if a polygon)
-hospital_points = hospitals.geometry.apply(lambda g: g.centroid).to_list()
+# extract primary schools from all schools (isced level = 1)
+primary_schools = schools[schools["isced:level"] == "1"]
+
+print(f"there are {len(primary_schools)} primary schools in greater manchester (+buffer).")
+
+# create primary school points (sometimes can be polygons points so convesrt it to their centroid if a polygon)
+primary_points = primary_schools.geometry.apply(lambda g: g.centroid).to_list()
 
 
 # GRAPH (PT NETWORK)
@@ -110,16 +115,16 @@ transport_network = r5py.TransportNetwork(
 print(f"graph loaded in: {perf_counter() - start_time} seconds")
 
 
-# PT TRAVEL TIME (FASTEST TO NEAREST HOSPITAL)
+# PT TRAVEL TIME (FASTEST TO NEAREST PRIMARY SCHOOL)
 
 # create origins from worst_pop_points (must be EPSG:4326) to use in the network
 origins = worst_pop_points.to_crs(4326)[["OA21CD", "geometry"]].copy()
 origins = origins.rename(columns={"OA21CD": "id"})
 
-# create destinations from hospital_points (must be EPSG:4326) to use in the network
+# create destinations from primary_points (must be EPSG:4326) to use in the network
 destinations = GeoDataFrame(
-    {"id": list(range(len(hospital_points)))},
-    geometry = hospital_points,
+    {"id": list(range(len(primary_points)))},
+    geometry = primary_points,
     crs = 4326)
 
 # pick a date to do the network analysis from
@@ -140,18 +145,18 @@ travel_matrix = r5py.TravelTimeMatrix(
 
 print(f"PT matrix computed in: {perf_counter() - start_time_pt} seconds")
 
-# get the fastest hospital for each OA centroid
+# get the fastest primary for each OA centroid
 nearest_pt = (
     travel_matrix
     .groupby("from_id", as_index=False)["travel_time"]
     .min()
-    .rename(columns={"from_id": "OA21CD", "travel_time": "hospital_pt_8am"}))
+    .rename(columns={"from_id": "OA21CD", "travel_time": "primary_pt_8am"}))
 
 # join back to worst_pop_points
 worst_pop_points = worst_pop_points.merge(nearest_pt, on="OA21CD", how="left")
 
 # quick success stats
-valid_times = worst_pop_points["hospital_pt_8am"].dropna().to_list()
+valid_times = worst_pop_points["primary_pt_8am"].dropna().to_list()
 print(f"Valid routes: {len(valid_times)} / {len(worst_pop_points)}")
 
 if len(valid_times) > 0:
@@ -166,7 +171,7 @@ else:
 # PLOTTING MAP
 
 # create copy of the results with the OA21CD (same in the OA's and worst_pop_points) and the results
-results = worst_pop_points[["OA21CD", "hospital_pt_8am"]]
+results = worst_pop_points[["OA21CD", "primary_pt_8am"]]
 
 # merge the gm OAs and results so that the OA21CD are corresponding
 gm_oas = gm_oas.merge(results, on = "OA21CD", how = "left")
@@ -174,7 +179,7 @@ gm_oas = gm_oas.merge(results, on = "OA21CD", how = "left")
 # change crs to be the same
 gm_boundary_plot = gm_boundary.to_crs(27700)
 gm_oas_plot = gm_oas.to_crs(27700)
-hospital_points_plot = GeoDataFrame(geometry = hospital_points, crs = 4326).to_crs(27700)
+primary_points_plot = GeoDataFrame(geometry = primary_points, crs = 4326).to_crs(27700)
 gm_districts_plot = gm_districts.to_crs(27700)
 
 # create map axis object
@@ -186,7 +191,7 @@ my_ax.axis('off')
 # plot the OA's
 gm_oas_plot.plot(
     ax = my_ax,						
-    column = 'hospital_pt_8am',
+    column = 'primary_pt_8am',
     cmap = 'YlOrRd',          
     scheme = 'user_defined',
     classification_kwds = {'bins' :[ 15, 30, 45]},
@@ -197,7 +202,7 @@ gm_oas_plot.plot(
                      "label": "Non-TRSE OA"},
     legend_kwds = {
     'loc': 'lower right',
-    'title': 'Shortest Travel Time to Nearest Hospital (mins)',
+    'title': 'Shortest Travel Time to Nearest Primary School (mins)',
     'frameon': True,
     'borderpad': 0.6,
     'labelspacing': 0.5
@@ -235,12 +240,12 @@ labels[-5] = "0-15 mins (Low Spatial Barrier)"
 for text, new_label in zip(legend.get_texts(), labels):
     text.set_text(new_label)
  
-legend.set_title("Public Transport Travel Time to Nearest Hospital (minutes)\n(Departure Date: Wednesday 08:00)", prop={'size':10})
+legend.set_title("Public Transport Travel Time to Nearest Primary School (minutes)\n(Departure Date: Wednesday 08:00)", prop={'size':10})
 for text in legend.get_texts():
     text.set_fontsize(9)
 
-# plot the locations, coloured by distance to hospitals
-#hospital_points_plot.plot(
+# plot the locations, coloured by distance to primary schools
+#primary_points_plot.plot(
     #ax = my_ax,
     #linewidth = 0,
     #marker = 'x',
