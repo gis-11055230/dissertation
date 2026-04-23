@@ -8,7 +8,7 @@ The "doctors_pt.py", "hospitals_pt.py", "job_centres_pt.py", "primary_pt.py" and
 
 Output maps are stored in the "out" folder.
 
-The A* algorithm was used in GEOG30551 Understanding GIS week 9 practical: understaning networks (ran by Jonny Huck) and implemented by me for my dissertation project. Data was sourced from:
+The A* algorithm was used in GEOG30551 Understanding GIS Week 9 Practical: Understanding Networks (ran by Jonny Huck) and implemented by me for my dissertation project. Data was sourced from:
 
 Key service locations and networks were sourced from OpenStreetMap. 
 
