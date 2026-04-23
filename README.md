@@ -19,9 +19,10 @@ Population-weighted OA centroids and boundary data were sourced from the Office 
 https://geoportal.statistics.gov.uk/datasets/b9b2b2440af240ce9d30a1d39a7507c2_0/explore
 https://geoportal.statistics.gov.uk/datasets/f27b6426a93042a1900f5d688fbf9252_0/explore?location=53.343144%2C-2.203893%2C9.02
 https://geoportal.statistics.gov.uk/datasets/ons::local-authority-districts-december-2023-boundaries-uk-bgc-2/about
+https://geoportal.statistics.gov.uk/datasets/6beafcfd9b9c4c9993a06b6b199d7e6d_0/explore
+
 Public transport schedules were sourced from data.gov.uk:
 https://www.data.gov.uk/dataset/c3ca6469-7955-4a57-8bfc-58ef2361b797/gm-public-transport-schedules-gtfs
-https://geoportal.statistics.gov.uk/datasets/6beafcfd9b9c4c9993a06b6b199d7e6d_0/explore
 
 The Greater Manchester network extract was sourced from Geofabrik:
 https://download.geofabrik.de/europe/united-kingdom/england/greater-manchester.html
