@@ -8,10 +8,18 @@ The "doctors_pt.py", "hospitals_pt.py", "job_centres_pt.py", "primary_pt.py" and
 
 Output maps are stored in the "out" folder.
 
-Key service locations and networks were sourced from OpenStreetMap. TRSE-vulnerable OAs were identified using the Transport for the North dataset: https://trse.transportforthenorth.com/combined-authority  
+The A* algorithm was used in GEOG30551 Understanding GIS week 9 practical: understaning networks (ran by Jonny Huck) and implemented by me for my dissertation project. Data was sourced from:
 
-Population-weighted OA centroids and boundary data were sourced from the Office for National Statistics.  
+      Key service locations and networks were sourced from OpenStreetMap. TRSE-vulnerable OAs
+      were identified using the Transport for the North dataset:
+      https://trse.transportforthenorth.com/combined-authority  
+    
+      Population-weighted OA centroids and boundary data were sourced from the Office fo
+      National Statistics.  
+    
+      Public transport schedules were sourced from data.gov.uk:
+      https://www.data.gov.uk/dataset/c3ca6469-7955-4a57-8bfc-58ef2361b797/gm-public-transport
+      schedules-gtfs
 
-Public transport schedules were sourced from data.gov.uk: https://www.data.gov.uk/dataset/c3ca6469-7955-4a57-8bfc-58ef2361b797/gm-public-transport-schedules-gtfs  
-
-The Greater Manchester network extract was sourced from Geofabrik: https://download.geofabrik.de/europe/united-kingdom/england/greater-manchester.html
+      The Greater Manchester network extract was sourced from Geofabrik:
+      https://download.geofabrik.de/europe/united-kingdom/england/greater-manchester.html
